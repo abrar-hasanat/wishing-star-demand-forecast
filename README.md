@@ -21,8 +21,11 @@ This project demonstrates a full-stack enterprise analytics workflow, moving fro
 ## 3. The IBM Cognos Executive Dashboard
 
 *(The interactive dashboard deployed to leadership for daily monitoring of supply chain health.)*
+<img width="1547" height="770" alt="image" src="https://github.com/user-attachments/assets/e2797194-2b57-4d62-81bd-49a124516916" />
 
+<img width="1561" height="760" alt="image" src="https://github.com/user-attachments/assets/86c43793-151d-4cba-912f-612b1a0c5ce3" />
 
+<img width="1332" height="776" alt="image" src="https://github.com/user-attachments/assets/139b7732-2d56-4a6a-84c5-ab6fd59db40d" />
 
 
 ## 4. Strategic Findings & Recommendations
