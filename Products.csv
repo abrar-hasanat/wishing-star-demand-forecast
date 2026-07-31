@@ -1,0 +1,16 @@
+ProductID,Category,BasePrice,SupplierLeadTime_Days
+1,Skincare,45.0,21
+2,Skincare,60.0,14
+3,Apparel,25.0,10
+4,Apparel,35.0,10
+5,Apparel,55.0,12
+6,Home,120.0,30
+7,Home,85.0,30
+8,Home,15.0,7
+9,Skincare,30.0,14
+10,Skincare,22.0,14
+11,Accessories,18.0,7
+12,Accessories,40.0,10
+13,Accessories,28.0,10
+14,Home,210.0,45
+15,Apparel,75.0,15
