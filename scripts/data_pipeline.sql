@@ -1,14 +1,11 @@
--- ==============================================================================
--- File: data_pipeline.sql
--- Purpose: Enterprise Data Pipeline for "Wishing Star"
--- Description: Aggregates daily transactional order data with historical 
---              inventory logs and product metadata. Engineered to identify 
---              daily sales volume, revenue, and boolean stockout events.
--- Dialect: PostgreSQL
--- ==============================================================================
+/*
+File: data_pipeline.sql
+Purpose: Aggregate daily demand and inventory status for Wishing Star.
+Dialect: PostgreSQL
+*/
 
 WITH daily_sales AS (
-    -- Aggregate line-item transactions into daily product-level metrics
+    /* Aggregate line item transactions into daily product metrics. */
     SELECT 
         DATE(o."OrderDate") AS sale_date,
         oi."ProductID",
@@ -31,13 +28,13 @@ SELECT
     COALESCE(ds.daily_revenue, 0) AS total_revenue,
     il."UnitsInStock",
     il."UnitsReceived",
-    -- Identify days where inventory hits absolute zero (Stockout Anomaly)
+    /* Identify days where inventory reaches zero. */
     CASE 
         WHEN il."UnitsInStock" <= 0 THEN TRUE 
         ELSE FALSE 
     END AS is_stockout
 FROM "Inventory_Log" il
--- Left join guarantees we keep days with 0 sales but active inventory tracking
+/* Keep days with zero sales and active inventory tracking. */
 LEFT JOIN daily_sales ds 
     ON il."Date"::DATE = ds.sale_date 
     AND il."ProductID" = ds."ProductID"
