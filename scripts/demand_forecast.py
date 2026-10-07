@@ -1,4 +1,4 @@
-"""Create daily demand forecasts and three week stockout warnings."""
+"""Backtest a weekday demand baseline on synthetic order history."""
 
 from __future__ import annotations
 
@@ -12,8 +12,7 @@ from typing import Iterable
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ORDER_HISTORY_MONTHS = 42
-FORECAST_ACCURACY = 0.91
-STOCKOUT_WARNING_DAYS = 21
+MIN_TRAINING_DAYS = 28
 REORDER_QTY_LIMIT = 600
 
 
@@ -73,38 +72,61 @@ def load_daily_demand(
 
 
 def weekday_averages(demand: dict[date, int]) -> dict[int, float]:
-    """Calculate an interpretable weekday baseline forecast."""
+    """Calculate weekday means, including dates with no orders."""
     totals: dict[int, int] = defaultdict(int)
     counts: dict[int, int] = defaultdict(int)
-    for sale_date, units in demand.items():
-        totals[sale_date.weekday()] += units
+    sale_date = min(demand)
+    while sale_date <= max(demand):
+        totals[sale_date.weekday()] += demand.get(sale_date, 0)
         counts[sale_date.weekday()] += 1
+        sale_date += timedelta(days=1)
     return {weekday: totals[weekday] / counts[weekday] for weekday in totals}
 
 
 def build_forecast_rows(demand: dict[date, int], lead_time: int) -> list[dict[str, object]]:
-    """Build daily forecast rows with a forward rolling lead time total."""
-    averages = weekday_averages(demand)
+    """Predict each day using earlier dates, after a 28-day warm-up.
+
+    The lead-time check compares expected demand with a fixed reorder threshold.
+    It is not a stockout prediction: on-hand stock and incoming orders are absent.
+    Its full horizon is calculated even at the sample end.
+    """
+    if lead_time <= 0:
+        raise ValueError("Supplier lead time must be positive.")
     first_date, last_date = min(demand), max(demand)
     dates = []
     current_date = first_date
     while current_date <= last_date:
         dates.append(current_date)
         current_date += timedelta(days=1)
-    forecasts = [averages[sale_date.weekday()] for sale_date in dates]
+    totals: dict[int, int] = defaultdict(int)
+    counts: dict[int, int] = defaultdict(int)
     rows: list[dict[str, object]] = []
     for index, sale_date in enumerate(dates):
-        lead_time_demand = sum(forecasts[index : index + lead_time])
-        rows.append(
-            {
+        if index >= MIN_TRAINING_DAYS:
+            averages = {day: totals[day] / counts[day] for day in range(7)}
+            lead_time_demand = sum(
+                averages[(sale_date + timedelta(days=offset)).weekday()]
+                for offset in range(lead_time)
+            )
+            rows.append({
                 "ds": sale_date.isoformat(),
                 "y": demand.get(sale_date, 0),
-                "yhat": round(forecasts[index], 2),
+                "yhat": round(averages[sale_date.weekday()], 2),
                 "rolling_lead_time_demand": round(lead_time_demand, 2),
-                "stockout_alert_flag": lead_time_demand > REORDER_QTY_LIMIT,
-            }
-        )
+                "reorder_threshold_exceeded": lead_time_demand > REORDER_QTY_LIMIT,
+            })
+        totals[sale_date.weekday()] += demand.get(sale_date, 0)
+        counts[sale_date.weekday()] += 1
+    if not rows:
+        raise ValueError("More than 28 calendar days are required for evaluation.")
     return rows
+
+
+def forecast_errors(rows: list[dict[str, object]]) -> tuple[float, float | None]:
+    """Return measured MAE and WAPE across rolling-origin predictions."""
+    absolute_error = sum(abs(float(row["y"]) - float(row["yhat"])) for row in rows)
+    actual_total = sum(float(row["y"]) for row in rows)
+    return absolute_error / len(rows), absolute_error / actual_total if actual_total else None
 
 
 def write_forecast(rows: list[dict[str, object]], output_path: Path) -> None:
@@ -125,11 +147,15 @@ def main() -> None:
         raise ValueError(
             f"Expected {ORDER_HISTORY_MONTHS} months of order history, found {history_months}."
         )
-    write_forecast(build_forecast_rows(demand, lead_time), args.output)
+    rows = build_forecast_rows(demand, lead_time)
+    write_forecast(rows, args.output)
+    mae, wape = forecast_errors(rows)
+    wape_text = f"{wape:.1%}" if wape is not None else "undefined (zero observed demand)"
     print(
         f"Wrote {args.output} from {history_months} months of history. "
-        f"Documented backtest accuracy: {FORECAST_ACCURACY:.0%}. "
-        f"Stockout warning horizon: {STOCKOUT_WARNING_DAYS // 7} weeks."
+        f"Rolling-origin MAE: {mae:.2f} units; WAPE: {wape_text}. "
+        f"Supplier lead-time assumption: {lead_time} days. "
+        "Synthetic demonstration; no verified stockout-warning lead time."
     )
 
 
